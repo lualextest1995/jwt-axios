@@ -40,7 +40,6 @@ instance.interceptors.response.use(
     return response
   },
   (error) => {
-    console.log('response error:', error)
     const { config, response } = error
     if (response && response.status === 401) {
       return HandlerBy401(config)
@@ -66,40 +65,36 @@ async function refreshAccessToken() {
 }
 
 function HandlerBy401(config) {
-  if (!isRefreshing) {
-    isRefreshing = true
-    return refreshAccessToken()
-      .then((res) => {
-        updateToken(res)
-        console.log('處理當前請求:', config.url)
-        instance.request(config)
-        queue.toArray().forEach((item) => {
-          console.log('處理佇列中的請求:', item.config.url)
-          instance.request(item.config).then(item.resolve).catch(item.reject)
-        })
-        return queue.clear() // 清空佇列
-      })
-      .catch((err) => {
-        // 清空佇列與cookie
-        if (err.status === 401) {
-          console.log('清空佇列與cookie', err)
-          queue.clear()
-          Cookie.clear()
-        }
-        return Promise.reject(err)
-      })
-      .finally(() => {
-        isRefreshing = false
-      })
-  }
-
   return new Promise((resolve, reject) => {
+    // 把這個請求包成任務，先入佇列
     console.log('將請求加入佇列:', config.url)
     queue.enqueue({ config, resolve, reject })
-    console.log(
-      '當前佇列:',
-      queue.toArray().map((item) => item.config.url),
-    )
+    if (!isRefreshing) {
+      isRefreshing = true
+      refreshAccessToken()
+        .then((res) => {
+          updateToken(res)
+          // 一次把佇列裡的請求全部重試
+          queue.toArray().forEach((task) => {
+            console.log('處理佇列中的請求:', task.config.url)
+            instance.request(task.config).then(task.resolve).catch(task.reject)
+          })
+        })
+        .catch((err) => {
+          // Refresh 失敗，整個佇列都 reject
+          queue.toArray().forEach((task) => task.reject(err))
+          // 如果是 refresh 自己也清除憑證
+          if (err.status === 401) {
+            console.log('清空佇列與cookie', err)
+            Cookie.clear()
+          }
+          return Promise.reject(err)
+        })
+        .finally(() => {
+          queue.clear()
+          isRefreshing = false
+        })
+    }
   })
 }
 
