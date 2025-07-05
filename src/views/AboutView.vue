@@ -1,68 +1,87 @@
 <template>
   <div class="about">
     <h1>This is an about page</h1>
-    <button @click="login">登入</button>
     <button @click="logout">登出</button>
     <button @click="batchRequests">批量打</button>
     <button @click="fetchProfile">打 profile</button>
     <button @click="fetchData">打 data</button>
     <button @click="fetchAdmin">打 admin</button>
+    <p>Profile:</p>
+    <pre>{{ data.profile }}</pre>
+    <p>Data:</p>
+    <pre>{{ data.data }}</pre>
+    <p>Admin:</p>
+    <pre>{{ data.admin }}</pre>
   </div>
 </template>
 
 <script setup>
 import http from '@/utils/request'
 import Cookies from '@/utils/cookie'
-
-async function login() {
-  await http.post('/api/login', {
-    name: 'alice',
-    password: 'password123',
-  })
-}
+import { useRouter } from 'vue-router'
+import { reactive } from 'vue'
+const router = useRouter()
+const data = reactive({
+  profile: null,
+  data: null,
+  admin: null,
+})
 
 async function logout() {
-  await http.post('/api/logout')
-  Cookies.clear()
+  try {
+    await http.post('/api/logout')
+  } catch (error) {
+    console.warn('登出失敗:', error)
+  } finally {
+    Cookies.clear()
+    router.push('/')
+  }
 }
 
 async function batchRequests() {
-  const requests = [
-    http.get('/api/profile'),
-    http.get('/api/data'),
-    http.get('/api/admin'),
-  ]
-  await Promise.all(requests)
+  data.profile = null
+  data.data = null
+  data.admin = null
+  const requests = [http.get('/api/profile'), http.get('/api/data'), http.get('/api/admin')]
+  try {
+    const res = await Promise.all(requests)
+    data.profile = res[0].data
+    data.data = res[1].data
+    data.admin = res[2].data
+  } catch (error) {
+    console.error('批量請求失敗:', error)
+  }
 }
 
 async function fetchProfile() {
+  data.profile = null
   try {
     const response = await http.get('/api/profile')
-    console.log('Profile:', response.data)
+    data.profile = response.data
   } catch (error) {
     console.error('Error fetching profile:', error)
   }
 }
 
 async function fetchData() {
+  data.data = null
   try {
     const response = await http.get('/api/data')
-    console.log('Data:', response.data)
+    data.data = response.data
   } catch (error) {
     console.error('Error fetching data:', error)
   }
 }
 
 async function fetchAdmin() {
+  data.admin = null
   try {
     const response = await http.get('/api/admin')
-    console.log('Admin:', response.data)
+    data.admin = response.data
   } catch (error) {
     console.error('Error fetching admin:', error)
   }
 }
-
-
 </script>
 
 <style>

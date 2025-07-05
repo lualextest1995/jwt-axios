@@ -2,6 +2,7 @@ import axios from 'axios'
 import Queue from './queue'
 import Cookie from './cookie'
 import JWT from './jwt'
+import router from '@/router'
 
 export const TOKEN_CONST = Object.freeze({
   ACCESS_HEADER_KEY: 'x-access-token',
@@ -21,7 +22,7 @@ const instance = axios.create({
 
 instance.interceptors.request.use(
   (config) => {
-    console.log('request config:', config.url)
+    console.log('發起請求:', config.url)
     const accessToken = Cookie.get(TOKEN_CONST.LS_ACCESS_KEY)
     if(accessToken){
       config.headers[TOKEN_CONST.ACCESS_HEADER_KEY] = accessToken
@@ -36,7 +37,6 @@ instance.interceptors.request.use(
 instance.interceptors.response.use(
   (response) => {
     updateToken(response)
-
     return response
   },
   (error) => {
@@ -67,7 +67,7 @@ async function refreshAccessToken() {
 function HandlerBy401(config) {
   return new Promise((resolve, reject) => {
     // 把這個請求包成任務，先入佇列
-    console.log('將請求加入佇列:', config.url)
+    console.log('請求加入佇列:', config.url)
     queue.enqueue({ config, resolve, reject })
     if (!isRefreshing) {
       isRefreshing = true
@@ -85,8 +85,12 @@ function HandlerBy401(config) {
           queue.toArray().forEach((task) => task.reject(err))
           // 如果是 refresh 自己也清除憑證
           if (err.status === 401) {
-            console.log('清空佇列與cookie', err)
             Cookie.clear()
+            console.log('清空佇列與cookie：',{
+              cookie: Cookie.getAll(),
+              queue: queue.toArray(),
+            } )
+            router.push('/')
           }
           return Promise.reject(err)
         })
@@ -102,9 +106,9 @@ function updateToken(response) {
   const access = response.headers[TOKEN_CONST.ACCESS_HEADER_KEY]
   const refresh = response.headers[TOKEN_CONST.REFRESH_HEADER_KEY]
   if (access && refresh) {
-    console.log('更新權限了')
     const refreshExp = JWT.getExpiration(refresh)
     Cookie.setSession(TOKEN_CONST.LS_ACCESS_KEY, access)
     Cookie.set(TOKEN_CONST.LS_REFRESH_KEY, refresh, { expires: refreshExp })
+    console.log('更新 token:', { access, refresh })
   }
 }
