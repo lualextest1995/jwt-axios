@@ -18,44 +18,37 @@ export const TOKEN_CONST = Object.freeze({
 const queue = new Queue()
 let isRefreshing = false
 
+function getBaseUrl() {
+  const { envStr } = getEnvs()
+  return envStr === 'dev' ? '/api' : GLOBAL_DATA[envStr].baseUrl
+}
+
+function getConfig(){
+  const appStore = useAppStore()
+  return {
+    baseURL: getBaseUrl(),
+    timeout: 24 * 60 * 60 * 1000, // 24h
+    withCredentials: false,
+    headers: {
+      'Content-Type': 'application/json;charset=UTF-8',
+      currency: appStore.currency,
+    },
+  }
+}
+
 async function refreshAccessToken() {
+  const options = getConfig()
+  options.headers[TOKEN_CONST.REFRESH_HEADER_KEY] = Cookie.get(TOKEN_CONST.LS_REFRESH_KEY)
+  options.headers[TOKEN_CONST.ACCESS_HEADER_KEY] = Cookie.get(TOKEN_CONST.LS_ACCESS_KEY)
   return axios.post(
     '/api/refresh',
     {},
-    {
-      baseURL: 'http://localhost:3000',
-      headers: {
-        [TOKEN_CONST.REFRESH_HEADER_KEY]: Cookie.get(TOKEN_CONST.LS_REFRESH_KEY),
-        [TOKEN_CONST.ACCESS_HEADER_KEY]: Cookie.get(TOKEN_CONST.LS_ACCESS_KEY),
-      },
-    },
+    options,
   )
 }
 
 class HttpRequest {
-  constructor() {
-    this.baseUrl = this.getBaseUrl()
-    this.withCredentials = false
-    this.timeout = 24 * 60 * 60 * 1000 // 24h
-  }
-
-  getBaseUrl() {
-    const { envStr } = getEnvs()
-    return envStr === 'dev' ? '/api' : GLOBAL_DATA[envStr].baseUrl
-  }
-
-  getConfig() {
-    const appStore = useAppStore()
-    return {
-      baseURL: this.baseUrl,
-      timeout: this.timeout,
-      withCredentials: this.withCredentials,
-      headers: {
-        'Content-Type': 'application/json;charset=UTF-8',
-        currency: appStore.currency,
-      },
-    }
-  }
+  constructor() {}
 
   getParams({ method, data, ...rest }) {
     const payload = { method, ...rest }
@@ -78,7 +71,7 @@ class HttpRequest {
     }
   }
 
-  HandlerBy401(config,instance) {
+  HandlerBy401(config, instance) {
     return new Promise((resolve, reject) => {
       // 把這個請求包成任務，先入佇列
       console.log('請求加入佇列:', config.url)
@@ -94,7 +87,7 @@ class HttpRequest {
               instance.request(task.config).then(task.resolve).catch(task.reject)
             })
           })
-          .catch(async(err) => {
+          .catch(async (err) => {
             // Refresh 失敗，整個佇列都 reject
             queue.toArray().forEach((task) => task.reject(err))
             // 如果是 refresh 自己也清除憑證
@@ -103,7 +96,7 @@ class HttpRequest {
               const userStore = useUserStore()
               await userStore.RESET_INFO()
               router.push('/login')
-              ElMessage.error( '登入已失效，請重新登入' )
+              ElMessage.error('登入已失效，請重新登入')
               console.log('清空佇列與cookie：', {
                 cookie: Cookie.getAll(),
                 queue: queue.toArray(),
@@ -198,12 +191,11 @@ class HttpRequest {
 
   request(options) {
     const instance = axios.create()
-    const baseOpt = this.getConfig()
+    const baseOpt = getConfig()
     const params = { ...baseOpt, ...this.getParams(options) }
     this.setInterceptors(instance)
     return instance(params)
   }
-
 }
 
 const http = new HttpRequest()
