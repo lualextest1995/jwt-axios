@@ -51,17 +51,16 @@ instance.interceptors.response.use(
 export default instance
 
 async function refreshAccessToken() {
-  return axios.post(
-    '/api/refresh',
-    {},
-    {
+  const baseOpt = {
       baseURL: 'http://localhost:3000',
+      method: 'post',
+      url: '/api/refresh',
       headers: {
         [TOKEN_CONST.REFRESH_HEADER_KEY]: Cookie.get(TOKEN_CONST.LS_REFRESH_KEY),
         [TOKEN_CONST.ACCESS_HEADER_KEY]: Cookie.get(TOKEN_CONST.LS_ACCESS_KEY),
       },
-    },
-  )
+    }
+  return axios.request(baseOpt)
 }
 
 function HandlerBy401(config) {
